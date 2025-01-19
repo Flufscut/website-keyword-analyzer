@@ -2,20 +2,22 @@
 const API_URL = process.env.API_URL || 'http://localhost:5001';
 
 // Utility function for API calls
-async function callAPI(endpoint, options = {}) {
-    const url = `${API_URL}${endpoint}`;
+async function analyzeDomains(domains) {
+    const url = `${API_URL}/analyze`;
     try {
         const response = await fetch(url, {
-            ...options,
+            method: 'POST',
             headers: {
-                ...options.headers,
-                'Accept': 'application/json',
-            }
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ domains })
         });
+
         if (!response.ok) {
             const error = await response.json();
-            throw new Error(error.error || 'API request failed');
+            throw new Error(error.error || 'Analysis failed');
         }
+
         return await response.json();
     } catch (error) {
         console.error('API Error:', error);
@@ -36,9 +38,6 @@ document.addEventListener('DOMContentLoaded', function() {
     const newAnalysisBtn = document.getElementById('newAnalysisBtn');
     const tryAgainBtn = document.getElementById('tryAgainBtn');
 
-    let currentTaskId = null;
-    let progressCheckInterval = null;
-
     // Handle file upload form submission
     uploadForm.addEventListener('submit', async function(e) {
         e.preventDefault();
@@ -51,31 +50,26 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
 
-        // Create FormData object
-        const formData = new FormData();
-        formData.append('file', file);
-
         try {
             // Show progress section
             hideAllSections();
             progressSection.classList.remove('d-none');
-            updateProgress(0, 'Starting analysis...');
+            updateProgress(0, 'Reading file...');
 
-            // Upload file
-            const response = await callAPI('/upload', {
-                method: 'POST',
-                body: formData
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Upload failed');
+            // Read CSV file
+            const domains = await readCSVFile(file);
+            if (!domains.length) {
+                throw new Error('No valid domains found in file');
             }
 
-            // Start progress checking
-            currentTaskId = data.task_id;
-            startProgressChecking();
+            // Start analysis
+            updateProgress(20, 'Analyzing domains...');
+            const data = await analyzeDomains(domains);
+            
+            // Show results
+            updateProgress(100, 'Analysis complete!');
+            updateResults(data);
+            showResults();
 
         } catch (error) {
             showError(error.message);
@@ -106,36 +100,18 @@ document.addEventListener('DOMContentLoaded', function() {
             // Show progress section
             hideAllSections();
             progressSection.classList.remove('d-none');
-            updateProgress(0, 'Starting analysis...');
+            updateProgress(20, 'Analyzing domains...');
 
-            // Send domains
-            const response = await callAPI('/analyze', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ domains: domains })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.error || 'Analysis failed');
-            }
-
-            // Start progress checking
-            currentTaskId = data.task_id;
-            startProgressChecking();
+            // Start analysis
+            const data = await analyzeDomains(domains);
+            
+            // Show results
+            updateProgress(100, 'Analysis complete!');
+            updateResults(data);
+            showResults();
 
         } catch (error) {
             showError(error.message);
-        }
-    });
-
-    // Handle download button click
-    downloadBtn.addEventListener('click', function() {
-        if (currentTaskId) {
-            window.location.href = `/download/${currentTaskId}`;
         }
     });
 
@@ -149,39 +125,32 @@ document.addEventListener('DOMContentLoaded', function() {
         resetForm();
     });
 
-    function startProgressChecking() {
-        if (progressCheckInterval) {
-            clearInterval(progressCheckInterval);
-        }
-
-        progressCheckInterval = setInterval(async function() {
-            try {
-                const response = await callAPI(`/status/${currentTaskId}`);
-                const data = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(data.error || 'Failed to get status');
-                }
-
-                updateProgress(data.progress, getStatusMessage(data.status));
-
-                // Handle completion or failure
-                if (data.status === 'completed') {
-                    clearInterval(progressCheckInterval);
-                    if (data.results) {
-                        updateResults(data);
+    async function readCSVFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const text = e.target.result;
+                    const lines = text.split('\n');
+                    const headers = lines[0].toLowerCase().split(',');
+                    const domainIndex = headers.indexOf('domain');
+                    
+                    if (domainIndex === -1) {
+                        throw new Error('CSV file must have a "domain" column');
                     }
-                    showResults();
-                } else if (data.status === 'failed') {
-                    clearInterval(progressCheckInterval);
-                    showError(data.error || 'Analysis failed');
-                }
 
-            } catch (error) {
-                clearInterval(progressCheckInterval);
-                showError(error.message);
-            }
-        }, 1000);
+                    const domains = lines.slice(1)
+                        .map(line => line.split(',')[domainIndex].trim())
+                        .filter(domain => domain.length > 0);
+
+                    resolve(domains);
+                } catch (error) {
+                    reject(error);
+                }
+            };
+            reader.onerror = () => reject(new Error('Failed to read file'));
+            reader.readAsText(file);
+        });
     }
 
     function updateProgress(progress, message) {
@@ -189,21 +158,6 @@ document.addEventListener('DOMContentLoaded', function() {
         progressBar.style.width = `${percentage}%`;
         progressBar.textContent = `${percentage}%`;
         statusText.textContent = message;
-    }
-
-    function getStatusMessage(status) {
-        switch (status) {
-            case 'starting':
-                return 'Preparing to analyze domains...';
-            case 'processing':
-                return 'Analyzing domains...';
-            case 'completed':
-                return 'Analysis completed!';
-            case 'failed':
-                return 'Analysis failed';
-            default:
-                return 'Processing...';
-        }
     }
 
     function showError(message) {
@@ -266,14 +220,6 @@ document.addEventListener('DOMContentLoaded', function() {
         // Clear both forms
         uploadForm.reset();
         pasteForm.reset();
-        
-        // Reset task ID
-        currentTaskId = null;
-        
-        // Clear interval
-        if (progressCheckInterval) {
-            clearInterval(progressCheckInterval);
-        }
         
         // Show upload form
         hideAllSections();
