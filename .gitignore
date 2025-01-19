@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.env
+.venv
+venv/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+
+# Project specific
+uploads/
+*.csv
+!frontend/sample_input/*.csv
+
+# OS
+.DS_Store
+Thumbs.db 

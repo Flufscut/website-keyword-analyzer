@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Salesforce Mention Analyzer</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Custom CSS -->
+    <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet">
+    <!-- Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+        <div class="container">
+            <a class="navbar-brand" href="#">
+                <i class="fas fa-chart-line me-2"></i>
+                Salesforce Mention Analyzer
+            </a>
+        </div>
+    </nav>
+
+    <div class="container my-5">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="card shadow-sm">
+                    <div class="card-body p-4">
+                        <h2 class="card-title text-center mb-4">
+                            Analyze Domains for Salesforce Mentions
+                        </h2>
+                        
+                        <!-- Input Method Tabs -->
+                        <ul class="nav nav-tabs mb-4" id="inputTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="upload-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#upload-content" type="button" role="tab">
+                                    <i class="fas fa-file-upload me-2"></i>Upload CSV
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="paste-tab" data-bs-toggle="tab" 
+                                        data-bs-target="#paste-content" type="button" role="tab">
+                                    <i class="fas fa-paste me-2"></i>Paste Domains
+                                </button>
+                            </li>
+                        </ul>
+
+                        <!-- Tab Content -->
+                        <div class="tab-content" id="inputTabsContent">
+                            <!-- Upload CSV Tab -->
+                            <div class="tab-pane fade show active" id="upload-content" role="tabpanel">
+                                <form id="uploadForm" class="mb-4">
+                                    <div class="mb-3">
+                                        <label for="csvFile" class="form-label">Upload your CSV file</label>
+                                        <div class="input-group">
+                                            <input type="file" class="form-control" id="csvFile" accept=".csv" required>
+                                            <button type="submit" class="btn btn-primary">
+                                                <i class="fas fa-upload me-2"></i>Analyze
+                                            </button>
+                                        </div>
+                                        <div class="form-text">
+                                            CSV file should have a 'domain' column with the list of domains to analyze.
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+
+                            <!-- Paste Domains Tab -->
+                            <div class="tab-pane fade" id="paste-content" role="tabpanel">
+                                <form id="pasteForm" class="mb-4">
+                                    <div class="mb-3">
+                                        <label for="domainList" class="form-label">Enter your domains</label>
+                                        <textarea class="form-control" id="domainList" rows="6" 
+                                                placeholder="Enter one domain per line&#10;Example:&#10;salesforce.com&#10;microsoft.com&#10;apple.com" 
+                                                required></textarea>
+                                        <div class="form-text">
+                                            Enter one domain per line, without http:// or www.
+                                        </div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary">
+                                        <i class="fas fa-play me-2"></i>Analyze
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Progress Section (Hidden by default) -->
+                        <div id="progressSection" class="d-none">
+                            <h5 class="mb-3">Analysis Progress</h5>
+                            <div class="progress mb-3" style="height: 25px;">
+                                <div id="progressBar" 
+                                     class="progress-bar progress-bar-striped progress-bar-animated" 
+                                     role="progressbar" 
+                                     style="width: 0%">
+                                    0%
+                                </div>
+                            </div>
+                            <p id="statusText" class="text-center text-muted">
+                                Analyzing domains...
+                            </p>
+                        </div>
+
+                        <!-- Results Section (Hidden by default) -->
+                        <div id="resultsSection" class="d-none">
+                            <div class="alert alert-success mb-4">
+                                <i class="fas fa-check-circle me-2"></i>
+                                Analysis completed successfully!
+                            </div>
+                            
+                            <!-- Results Table -->
+                            <div class="table-responsive mb-4">
+                                <table class="table table-striped table-hover">
+                                    <thead class="table-primary">
+                                        <tr>
+                                            <th>Domain</th>
+                                            <th>Score</th>
+                                            <th>Status</th>
+                                            <th>Pages Crawled</th>
+                                            <th>Total Mentions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="resultsTableBody">
+                                        <!-- Results will be inserted here -->
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Summary Stats -->
+                            <div class="row mb-4">
+                                <div class="col-md-4">
+                                    <div class="card bg-light">
+                                        <div class="card-body text-center">
+                                            <h5 class="card-title">Average Score</h5>
+                                            <p class="card-text h3" id="averageScore">-</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-light">
+                                        <div class="card-body text-center">
+                                            <h5 class="card-title">Total Domains</h5>
+                                            <p class="card-text h3" id="totalDomains">-</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="card bg-light">
+                                        <div class="card-body text-center">
+                                            <h5 class="card-title">Success Rate</h5>
+                                            <p class="card-text h3" id="successRate">-</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="text-center">
+                                <button id="downloadBtn" class="btn btn-success">
+                                    <i class="fas fa-download me-2"></i>
+                                    Download CSV
+                                </button>
+                                <button id="newAnalysisBtn" class="btn btn-primary ms-2">
+                                    <i class="fas fa-plus me-2"></i>
+                                    New Analysis
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Error Section (Hidden by default) -->
+                        <div id="errorSection" class="d-none">
+                            <div class="alert alert-danger">
+                                <i class="fas fa-exclamation-circle me-2"></i>
+                                <span id="errorText"></span>
+                            </div>
+                            <div class="text-center">
+                                <button id="tryAgainBtn" class="btn btn-primary">
+                                    <i class="fas fa-redo me-2"></i>
+                                    Try Again
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom JS -->
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html> 
