@@ -242,7 +242,7 @@ def download_results(task_id):
 
 if __name__ == '__main__':
     try:
-        # Development server
-        app.run(host='0.0.0.0', port=5001, debug=True)
+        port = int(os.environ.get('PORT', 5001))
+        app.run(host='0.0.0.0', port=port, debug=False)
     except Exception as e:
         app.logger.error(f"Error starting server: {e}") 
